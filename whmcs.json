@@ -1,0 +1,31 @@
+{
+    "schema": "1.0",
+    "type": "whmcs-addons",
+    "name": "student_verification",
+    "license": "MIT",
+    "category": "other",
+    "description": {
+        "name": "Student Verification",
+        "tagline": "FranceStudent - Vérification de statut étudiant",
+        "long": "Cet addon permet de mettre en place un système de vérification de statut étudiant pour les clients WHMCS. Il permet de demander une preuve de statut étudiant à un client lors de la création de son compte, et de valider cette preuve en tant qu'administrateur.",
+        "features": [
+            "Demande de preuve de statut étudiant",
+            "Validation ou refus de la preuve par un administrateur",
+            "Blocage de l'achat de produits tant que la preuve n'est pas validée"
+        ]
+    },
+    "logo": {
+        "filename": "logo.png"
+    },
+    "support": {
+        "homepage": "https:\/\/francestudent.org\/", 
+        "email": "support@francestudent.org",
+        "support_url": "https:\/\/discord.gg\/francestudent"
+    },
+    "authors": [
+        {
+            "name": "Loan François",
+            "homepage": "https:\/\/linkedin.com\/in\/loanfrancois\/"
+        }
+    ]
+}
