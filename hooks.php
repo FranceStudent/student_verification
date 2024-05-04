@@ -39,72 +39,167 @@ add_hook('ClientAreaPage', 1, function ($vars) {
     // Récupérez l'information de la base de données.
     $result = Capsule::table('tblclients')->where('id', $clientId)->first();
 
-    if ($result && !$result->hasSeenContent) {
-        $showStudentVerification = <<<HTML
-        <div class="modal fade" id="myModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
-        <div class="modal-dialog" role="document">
-            <div class="modal-content">
-            <div class="modal-header">
-                <h4 class="modal-title" id="myModalLabel">Confirmation étudiante</h4>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+    if ($result) {
+        if (!$result->hasSeenContent) {
+            // L'utilisateur n'a pas encore vu le contenu.
+            $showStudentVerification = <<<HTML
+            <div id="alert" class="alert" style="display: none;"></div>
+            <div class="modal fade" id="myModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title" id="myModalLabel">Confirmation étudiante</h4>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body text-center">
+                    <form id="studentProofForm" method="post" enctype="multipart/form-data">
+                        <p class="text-center font-weight-bold mb-4">Pour accéder à nos services, nous avons besoin de vérifier que vous êtes étudiant.</p>
+                        <div class="row justify-content-center">
+                            <label for="studentProof" class="col-form-label">Veuillez télécharger un documents prouvant votre statut d'étudiant :</label>
+                            <input type="hidden" name="clientId" value="{$clientId}">
+                            <input type="file" class="form-control-file col-md-6 m-4" id="studentProof" name="studentProof" accept=".jpg, .jpeg, .png, .gif, .pdf" required>
+                        </div>
+                        <p class="text-center">Notre équipe vérifiera votre document et vous informera dès que possible de l'approbation de votre compte.</p>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Fermer</button>
+                    <button type="submit" form="studentProofForm" class="btn btn-primary">Envoyer</button>
+                </div>
+                </div>
             </div>
-            <div class="modal-body text-center">
-                <form id="studentProofForm" method="post" enctype="multipart/form-data">
-                    <p class="text-center font-weight-bold mb-4">Pour accéder à nos services, nous avons besoin de vérifier que vous êtes étudiant.</p>
-                    <div class="row justify-content-center">
-                        <label for="studentProof" class="col-form-label">Veuillez télécharger un documents prouvant votre statut d'étudiant :</label>
-                        <input type="hidden" name="clientId" value="{$clientId}">
-                        <input type="file" class="form-control-file col-md-6 m-4" id="studentProof" name="studentProof" accept=".jpg, .jpeg, .png, .gif, .pdf" required>
-                    </div>
-                    <p class="text-center">Notre équipe vérifiera votre document et vous informera dès que possible de l'approbation de votre compte.</p>
-                </form>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Fermer</button>
-                <button type="submit" form="studentProofForm" class="btn btn-primary">Envoyer</button>
-            </div>
-            </div>
-        </div>
-        </div>
-        <script>
-        $(document).ready(function() {
-            $('#myModal').modal('show');
+            <script>
+            $(document).ready(function() {
+                $('#myModal').modal('show');
 
-            $('#studentProofForm').on('submit', function(e) {
-                e.preventDefault();
+                $('#studentProofForm').on('submit', function(e) {
+                    e.preventDefault();
 
-                var fileInput = $('#studentProof');
-                var filePath = fileInput.val();
-                var allowedExtensions = /(\.jpg|\.jpeg|\.png|\.gif|\.pdf)$/i; // change this to your allowed extensions
+                    var fileInput = $('#studentProof');
+                    var filePath = fileInput.val();
+                    var allowedExtensions = /(\.jpg|\.jpeg|\.png|\.gif|\.pdf)$/i; // change this to your allowed extensions
 
-                if(!allowedExtensions.exec(filePath)){
-                    alert('Veuillez télécharger un fichier avec une extension .jpg, .jpeg, .png, .gif, .pdf seulement.');
-                    fileInput.val('');
-                    return false;
-                }
-
-                $.ajax({
-                    url: '/modules/addons/student_verification/handle_form.php',
-                    type: 'post',
-                    data: new FormData(this), // Envoyer les données du formulaire
-                    processData: false,
-                    contentType: false,
-                    success: function() {
-                        $('#myModal').modal('hide');
-                    },
-                    error: function() {
-                        alert('Une erreur s\'est produite lors de l\'envoi du formulaire.');
+                    if(!allowedExtensions.exec(filePath)){
+                        alert('Veuillez télécharger un fichier avec une extension .jpg, .jpeg, .png, .gif, .pdf seulement.');
+                        fileInput.val('');
+                        return false;
                     }
+
+                    $.ajax({
+                        url: '/modules/addons/student_verification/handle_form.php',
+                        type: 'post',
+                        data: new FormData(this), // Envoyer les données du formulaire
+                        processData: false,
+                        contentType: false,
+                        success: function() {
+                            $('#myModal').modal('hide');
+                            $('#alert').addClass('alert-success').text('Votre demande de vérification a été envoyée avec succès.').show();
+                        },
+                        error: function() {
+                            alert('Une erreur s\'est produite lors de l\'envoi du formulaire.');
+                        }
+                    });
                 });
             });
-        });
-        </script>
-        HTML;
+            </script>
+            HTML;
 
 
-        return [
-            'showStudentVerification' => $showStudentVerification,
-        ];
+            return [
+                'showStudentVerification' => $showStudentVerification,
+            ];
+        } else {
+            $verification = Capsule::table('mod_student_verification')
+                ->select('*')
+                ->where('student_id', $clientId)
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            if ($verification) {
+                if ($verification->verified === null) {
+                    $alertStudentVerification = <<<HTML
+                    <div class="alert alert-warning" role="alert">
+                        Votre demande est actuellement en cours de vérification. 
+                    </div>
+                    HTML;
+
+                    return [
+                        'showStudentVerification' => $alertStudentVerification,
+                    ];
+                } else if ($verification->verified === 0) {
+                    $alertStudentVerification = <<<HTML
+                    <div class="alert alert-danger" id="alertValidation" role="alert">
+                        Votre demande de vérification a été refusée.
+                        <a href="#" data-toggle="modal" data-target="#myModal">Cliquez ici</a> pour soumettre un nouveau document.
+                    </div>
+                    <div id="alert" class="alert" style="display: none;"></div>
+                    <div class="modal fade" id="myModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
+                        <div class="modal-dialog" role="document">
+                            <div class="modal-content">
+                            <div class="modal-header">
+                                <h4 class="modal-title" id="myModalLabel">Confirmation étudiante</h4>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                            </div>
+                            <div class="modal-body text-center">
+                                <form id="studentProofForm" method="post" enctype="multipart/form-data">
+                                    <p class="text-center font-weight-bold mb-4">Pour accéder à nos services, nous avons besoin de vérifier que vous êtes étudiant.</p>
+                                    <div class="row justify-content-center">
+                                        <label for="studentProof" class="col-form-label">Veuillez télécharger un documents prouvant votre statut d'étudiant :</label>
+                                        <input type="hidden" name="clientId" value="{$clientId}">
+                                        <input type="file" class="form-control-file col-md-6 m-4" id="studentProof" name="studentProof" accept=".jpg, .jpeg, .png, .gif, .pdf" required>                    
+                                    </div>
+                                    <p class="text-center">Notre équipe vérifiera votre document et vous informera dès que possible de l'approbation de votre compte.</p>
+                                </form>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Fermer</button>
+                                <button type="submit" form="studentProofForm" class="btn btn-primary">Envoyer</button>
+                            </div>
+                            </div>
+                        </div>
+                    </div>
+                    <script>
+                    $(document).ready(function() {
+                        $('#studentProofForm').on('submit', function(e) {
+                            e.preventDefault();
+
+                            var fileInput = $('#studentProof');
+                            var filePath = fileInput.val();
+                            var allowedExtensions = /(\.jpg|\.jpeg|\.png|\.gif|\.pdf)$/i;
+
+                            if(!allowedExtensions.exec(filePath)){
+                                alert('Veuillez télécharger un fichier avec une extension .jpg, .jpeg, .png, .gif, .pdf seulement.');
+                                fileInput.val('');
+                                return false;
+                            }
+
+                            $.ajax({
+                                url: '/modules/addons/student_verification/handle_form.php',
+                                type: 'post',
+                                data: new FormData(this), // Envoyer les données du formulaire
+                                processData: false,
+                                contentType: false,
+                                success: function() {
+                                    $('#myModal').modal('hide');
+                                    $('#alertValidation').hide();
+                                    $('#alert').addClass('alert-success').text('Votre demande a été envoyée avec succès.').show();
+                                },
+                                error: function() {
+                                    alert('Une erreur s\'est produite lors de l\'envoi du formulaire.');
+                                }
+                            });
+                        });
+                    });
+                    </script>
+                    HTML;
+
+                    return [
+                        'showStudentVerification' => $alertStudentVerification,
+                    ];
+                }
+            }
+        }
     }
 });
 
@@ -115,75 +210,191 @@ add_hook('ClientAreaPageProfile', 1, function ($vars) {
     // Récupérez l'information de la base de données.
     $result = Capsule::table('tblclients')->where('id', $clientId)->first();
 
-    if ($result && !$result->hasSeenContent) {
-        $alertStudentVerification = <<<HTML
-        <div id="alertValidation" class="alert alert-warning" role="alert">
-            Vous devez valider votre statut étudiant pour accéder à nos services. <a href="#" data-toggle="modal" data-target="#myModal">Cliquez ici</a> pour plus d'informations.
-        </div>
-        <div id="alert" class="alert" style="display: none;"></div>
-        <div class="modal fade" id="myModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
-        <div class="modal-dialog" role="document">
-            <div class="modal-content">
-            <div class="modal-header">
-                <h4 class="modal-title" id="myModalLabel">Confirmation étudiante</h4>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+    if ($result) {
+        if (!$result->hasSeenContent) {
+            // L'utilisateur n'a pas encore vu le contenu.
+            $alertStudentVerification = <<<HTML
+            <div id="alertValidation" class="alert alert-warning" role="alert">
+                Vous devez valider votre statut étudiant pour accéder à nos services. <a href="#" data-toggle="modal" data-target="#myModal">Cliquez ici</a> pour plus d'informations.
             </div>
-            <div class="modal-body text-center">
-                <form id="studentProofForm" method="post" enctype="multipart/form-data">
-                    <p class="text-center font-weight-bold mb-4">Pour accéder à nos services, nous avons besoin de vérifier que vous êtes étudiant.</p>
-                    <div class="row justify-content-center">
-                        <label for="studentProof" class="col-form-label">Veuillez télécharger un documents prouvant votre statut d'étudiant :</label>
-                        <input type="hidden" name="clientId" value="{$clientId}">
-                        <input type="file" class="form-control-file col-md-6 m-4" id="studentProof" name="studentProof" accept=".jpg, .jpeg, .png, .gif, .pdf" required>                    
-                    </div>
-                    <p class="text-center">Notre équipe vérifiera votre document et vous informera dès que possible de l'approbation de votre compte.</p>
-                </form>
+            <div id="alert" class="alert" style="display: none;"></div>
+            <div class="modal fade" id="myModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title" id="myModalLabel">Confirmation étudiante</h4>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body text-center">
+                    <form id="studentProofForm" method="post" enctype="multipart/form-data">
+                        <p class="text-center font-weight-bold mb-4">Pour accéder à nos services, nous avons besoin de vérifier que vous êtes étudiant.</p>
+                        <div class="row justify-content-center">
+                            <label for="studentProof" class="col-form-label">Veuillez télécharger un documents prouvant votre statut d'étudiant :</label>
+                            <input type="hidden" name="clientId" value="{$clientId}">
+                            <input type="file" class="form-control-file col-md-6 m-4" id="studentProof" name="studentProof" accept=".jpg, .jpeg, .png, .gif, .pdf" required>                    
+                        </div>
+                        <p class="text-center">Notre équipe vérifiera votre document et vous informera dès que possible de l'approbation de votre compte.</p>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Fermer</button>
+                    <button type="submit" form="studentProofForm" class="btn btn-primary">Envoyer</button>
+                </div>
+                </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Fermer</button>
-                <button type="submit" form="studentProofForm" class="btn btn-primary">Envoyer</button>
             </div>
-            </div>
-        </div>
-        </div>
-        <script>
-        $(document).ready(function() {
-            $('#studentProofForm').on('submit', function(e) {
-                e.preventDefault();
+            <script>
+            $(document).ready(function() {
+                $('#studentProofForm').on('submit', function(e) {
+                    e.preventDefault();
 
-                var fileInput = $('#studentProof');
-                var filePath = fileInput.val();
-                var allowedExtensions = /(\.jpg|\.jpeg|\.png|\.gif|\.pdf)$/i;
+                    var fileInput = $('#studentProof');
+                    var filePath = fileInput.val();
+                    var allowedExtensions = /(\.jpg|\.jpeg|\.png|\.gif|\.pdf)$/i;
 
-                if(!allowedExtensions.exec(filePath)){
-                    alert('Veuillez télécharger un fichier avec une extension .jpg, .jpeg, .png, .gif, .pdf seulement.');
-                    fileInput.val('');
-                    return false;
-                }
-
-                $.ajax({
-                    url: '/modules/addons/student_verification/handle_form.php',
-                    type: 'post',
-                    data: new FormData(this), // Envoyer les données du formulaire
-                    processData: false,
-                    contentType: false,
-                    success: function() {
-                        $('#myModal').modal('hide');
-                        $('#alertValidation').hide();
-                        $('#alert').addClass('alert-success').text('Votre demande a été envoyée avec succès.').show();
-                    },
-                    error: function() {
-                        alert('Une erreur s\'est produite lors de l\'envoi du formulaire.');
+                    if(!allowedExtensions.exec(filePath)){
+                        alert('Veuillez télécharger un fichier avec une extension .jpg, .jpeg, .png, .gif, .pdf seulement.');
+                        fileInput.val('');
+                        return false;
                     }
+
+                    $.ajax({
+                        url: '/modules/addons/student_verification/handle_form.php',
+                        type: 'post',
+                        data: new FormData(this), // Envoyer les données du formulaire
+                        processData: false,
+                        contentType: false,
+                        success: function() {
+                            $('#myModal').modal('hide');
+                            $('#alertValidation').hide();
+                            $('#alert').addClass('alert-success').text('Votre demande a été envoyée avec succès.').show();
+                        },
+                        error: function() {
+                            alert('Une erreur s\'est produite lors de l\'envoi du formulaire.');
+                        }
+                    });
                 });
             });
-        });
-        </script>
-        HTML;
+            </script>
+            HTML;
 
-        return [
-            'alertStudentVerification' => $alertStudentVerification,
-        ];
+            return [
+                'alertStudentVerification' => $alertStudentVerification,
+            ];
+        } else {
+            $verification = Capsule::table('mod_student_verification')
+                ->select('*')
+                ->where('student_id', $clientId)
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            if ($verification) {
+                if ($verification->verified === null) {
+                    $alertStudentVerification = <<<HTML
+                    <div class="alert alert-warning" role="alert">
+                        Votre demande est actuellement en cours de vérification. 
+                    </div>
+                    HTML;
+
+                    return [
+                        'alertStudentVerification' => $alertStudentVerification,
+                    ];
+                } else if ($verification->verified === 0) {
+                    $alertStudentVerification = <<<HTML
+                    <div class="alert alert-danger" role="alert">
+                        Votre demande de vérification a été refusée.
+                        <a href="#" data-toggle="modal" data-target="#myModal">Cliquez ici</a> pour soumettre un nouveau document.
+                    </div>
+                    <div class="modal fade" id="myModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
+                        <div class="modal-dialog" role="document">
+                            <div class="modal-content">
+                            <div class="modal-header">
+                                <h4 class="modal-title" id="myModalLabel">Confirmation étudiante</h4>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                            </div>
+                            <div class="modal-body text-center">
+                                <form id="studentProofForm" method="post" enctype="multipart/form-data">
+                                    <p class="text-center font-weight-bold mb-4">Pour accéder à nos services, nous avons besoin de vérifier que vous êtes étudiant.</p>
+                                    <div class="row justify-content-center">
+                                        <label for="studentProof" class="col-form-label">Veuillez télécharger un documents prouvant votre statut d'étudiant :</label>
+                                        <input type="hidden" name="clientId" value="{$clientId}">
+                                        <input type="file" class="form-control-file col-md-6 m-4" id="studentProof" name="studentProof" accept=".jpg, .jpeg, .png, .gif, .pdf" required>                    
+                                    </div>
+                                    <p class="text-center">Notre équipe vérifiera votre document et vous informera dès que possible de l'approbation de votre compte.</p>
+                                </form>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Fermer</button>
+                                <button type="submit" form="studentProofForm" class="btn btn-primary">Envoyer</button>
+                            </div>
+                            </div>
+                        </div>
+                    </div>
+                    <script>
+                    $(document).ready(function() {
+                        $('#studentProofForm').on('submit', function(e) {
+                            e.preventDefault();
+
+                            var fileInput = $('#studentProof');
+                            var filePath = fileInput.val();
+                            var allowedExtensions = /(\.jpg|\.jpeg|\.png|\.gif|\.pdf)$/i;
+
+                            if(!allowedExtensions.exec(filePath)){
+                                alert('Veuillez télécharger un fichier avec une extension .jpg, .jpeg, .png, .gif, .pdf seulement.');
+                                fileInput.val('');
+                                return false;
+                            }
+
+                            $.ajax({
+                                url: '/modules/addons/student_verification/handle_form.php',
+                                type: 'post',
+                                data: new FormData(this), // Envoyer les données du formulaire
+                                processData: false,
+                                contentType: false,
+                                success: function() {
+                                    $('#myModal').modal('hide');
+                                    $('#alertValidation').hide();
+                                    $('#alert').addClass('alert-success').text('Votre demande a été envoyée avec succès.').show();
+                                },
+                                error: function() {
+                                    alert('Une erreur s\'est produite lors de l\'envoi du formulaire.');
+                                }
+                            });
+                        });
+                    });
+                    </script>
+                    HTML;
+
+                    return [
+                        'alertStudentVerification' => $alertStudentVerification,
+                    ];
+                } else if ($verification->verified === 1) {
+                    $expirationDate = Capsule::table('tbladdonmodules')
+                        ->where('module', 'student_verification')
+                        ->where('setting', 'expiration_date')
+                        ->first();
+                    $alertStudentVerification = <<<HTML
+                    <div class="alert alert-success" role="alert">
+                        Votre compte étudiant est vérifié jusqu'au {$expirationDate->value}.
+                    </div>
+                    HTML;
+
+                    return [
+                        'alertStudentVerification' => $alertStudentVerification,
+                    ];
+                } else {
+                    $alertStudentVerification = <<<HTML
+                    <div class="alert alert-warning" role="alert">
+                        Il y a eu une erreur lors de la vérification de votre statut étudiant. Veuillez contacter le support.
+                    </div>
+                    HTML;
+
+                    return [
+                        'alertStudentVerification' => $alertStudentVerification,
+                    ];
+                }
+            }
+        }
     };
 });
 

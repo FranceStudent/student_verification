@@ -59,7 +59,7 @@ function student_verification_config()
 {
     return [
         // Display name for your module
-        'name' => 'FranceStudent - Student Verification',
+        'name' => 'Student Verification',
         // Description displayed within the admin interface
         'description' => 'Ce module permet de vérifier le statut d\'étudiant des utilisateurs',
         // Module author name
@@ -67,7 +67,7 @@ function student_verification_config()
         // Default language
         'language' => 'french',
         // Version number
-        'version' => '1.0',
+        'version' => '2.0',
         'fields' => [
             'upload_dir' => [
                 'FriendlyName' => 'Répertoire d\'upload',
@@ -78,6 +78,12 @@ function student_verification_config()
             'information' => [
                 'FriendlyName' => 'Information',
                 'Description' => '<small>Ajoutez {$showStudentVerification} et {$alertStudentVerification} dans clientareahome.tpl & clientareadetails.tpl</small>'
+            ],
+            'expiration_date' => [
+                'FriendlyName' => 'Date d\'expiration',
+                'Type' => 'text',
+                'Size' => '3',
+                'Description' => '<br>Date d\'expiration de la vérification de l\'étudiant (format : DD-MM), l\'année est automatiquement celle de l\'année en cours',
             ],
         ]
     ];
@@ -108,6 +114,7 @@ function student_verification_activate()
                 $table->string('student_id');
                 $table->string('document');
                 $table->boolean('verified')->nullable();
+                // $table->string('reason')->nullable();
                 $table->timestamps();
             }
         );
@@ -150,15 +157,15 @@ function student_verification_deactivate()
 {
     // Undo any database and schema modifications made by your module here
     try {
-        Capsule::schema()->dropIfExists('mod_student_verification');
+        // Capsule::schema()->dropIfExists('mod_student_verification');
 
-        Capsule::schema()->table(
-            'tblclients',
-            function ($table) {
-                /** @var \Illuminate\Database\Schema\Blueprint $table */
-                $table->dropColumn('hasSeenContent');
-            }
-        );
+        // Capsule::schema()->table(
+        //     'tblclients',
+        //     function ($table) {
+        //         /** @var \Illuminate\Database\Schema\Blueprint $table */
+        //         $table->dropColumn('hasSeenContent');
+        //     }
+        // );
 
         return [
             // Supported values here include: success, error or info
@@ -177,8 +184,49 @@ function student_verification_deactivate()
 function student_verification_output($vars)
 {
     $modulelink = $vars['modulelink'];
-    $version = $vars['version'];
-    $LANG = $vars['_lang'];
+
+    $output .= '<h1>Recherche d\'utilisateurs par identifiant</h1>';
+    $output .= '<div class="form-inline">';
+    $output .= '<div class="form-group col">';
+    $output .= '<div class="col-sm-10">';
+    $output .= '<input type="text" class="form-control" id="studentId" name="studentId" placeholder="Identifiant de l\'étudiant">';
+    $output .= '</div>';
+    $output .= '</div>';
+    $output .= '<a class="btn btn-success my-auto" id="searchButton" href="javascript:void(0);"><i class="fas fa-search"></i> Rechercher</a>';
+
+    $output .= <<<HTML
+    <script>
+    var modulelink = "{$modulelink}";
+    document.getElementById("searchButton").addEventListener("click", function(event) {
+    var studentId = document.getElementById("studentId").value;
+    if(studentId) {
+        window.location.href = modulelink + "&action=search&studentId=" + studentId;
+    }
+    });
+    </script>
+    HTML;
+
+    if (isset($_GET['studentId'])) {
+        $studentId = $_GET['studentId'];
+        $student = Capsule::table('mod_student_verification')
+            ->where('student_id', $studentId)
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        if ($student) {
+            if ($student->verified) {
+                $output .= "&nbsp&nbsp<span class='text-success'><i class='fas fa-check'></i> L'étudiant avec l'ID $studentId est vérifié.</span>";
+            } else if ($student->verified === 0) {
+                $output .= "&nbsp&nbsp<span class='text-danger'><i class='fas fa-times'></i> L'étudiant avec l'ID $studentId a été rejeté.</span>";
+            } else {
+                $output .= "&nbsp&nbsp<span class='text-warning'><i class='fas fa-exclamation-triangle'></i> L'étudiant avec l'ID $studentId est en attente de vérification.</span>";
+            }
+        } else {
+            $output .= "&nbsp&nbsp<span class='text-danger'><i class='fas fa-times'></i> L'étudiant avec l'ID $studentId n'a pas soumis de document.</span>";
+        }
+    }
+
+    $output .= '</div></br>';
 
     // Récupérer toutes les vérifications avec les informations des utilisateurs
     $verifications = Capsule::table('mod_student_verification')
@@ -201,35 +249,66 @@ function student_verification_output($vars)
                 // ], 'adminusername');
             } elseif ($_GET['action'] == 'reject') {
                 Capsule::table('mod_student_verification')->where('id', $id)->update(['verified' => false]);
-                Capsule::table('tblclients')->where('id', $verification->student_id)->update(['hasSeenContent' => 0]);
 
                 // localAPI('SendEmail', [
                 //     'messagename' => 'Rejection Email Template Name',
                 //     'id' => $verification->student_id
                 // ], 'adminusername');
             }
+
+            $documentPath = $verification->document;
+            if (file_exists($documentPath)) {
+                unlink($documentPath);
+            }
         }
 
         header('Location: ' . $modulelink);
     }
 
-    $output = '<h1 class="mb-4">Approbation des documents des étudiants</h1>';
+    $output .= '<h1 class="mb-4">Approbation des documents des étudiants</h1>';
+
+    $output .= '<div class="form-group">';
+    $output .= '<label for="filterId">Filtrer par ID :</label>';
+    $output .= '<input type="text" class="form-control" id="filterId" name="filterId" placeholder="Entrez l\'ID">';
+    $output .= '</div>';
+
     $output .= '<table class="table table-striped">';
     $output .= '<thead class="thead-dark">';
-    $output .= '<tr><th>Nom d\'utilisateur</th><th>Document envoyé</th><th>Action</th></tr>';
+    $output .= '<tr><th>ID utilisateur</th><th>Nom d\'utilisateur</th><th>Document envoyé</th><th>Action</th></tr>';
     $output .= '</thead>';
     $output .= '<tbody>';
 
+    $output .= <<<HTML
+    <script>
+    document.getElementById("filterId").addEventListener("input", function(event) {
+    var filterId = event.target.value;
+    var rows = document.querySelectorAll("table tbody tr");
+    rows.forEach(function(row) {
+        var cell = row.querySelector("td:first-child");
+        if (cell) {
+        var id = cell.textContent;
+        if (filterId === "" || id === filterId) {
+            row.style.display = "";
+        } else {
+            row.style.display = "none";
+        }
+        }
+    });
+    });
+    </script>
+    HTML;
+
     foreach ($verifications as $verification) {
         $output .= '<tr>';
+        $output .= '<td>' . $verification->student_id . '</td>';
         $output .= '<td>' . $verification->firstname . ' ' . $verification->lastname . '</td>';
 
         $document = pathinfo($verification->document, PATHINFO_BASENAME);
         $output .= '<td><a class="my-auto" href="/modules/addons/student_verification/download.php?file=' . urlencode($verification->id) . '">' . $document . '</a></td>';
 
         $output .= '<td>';
-        $output .= '<a class="btn btn-success my-auto" href="' . $modulelink . '&action=approve&id=' . $verification->id . '">Approuver</a>';
-        $output .= ' <a class="btn btn-danger my-auto" href="' . $modulelink . '&action=reject&id=' . $verification->id . '">Rejeter</a>';
+        $output .= '<a class="btn btn-success my-auto" href="' . $modulelink . '&action=approve&id=' . $verification->id . '"><i class="fas fa-check"></i> Approuver</a>';
+        $output .= ' <a class="btn btn-danger my-auto" href="' . $modulelink . '&action=reject&id=' . $verification->id . '"><i class="fas fa-times"></i> Rejeter</a>';
         $output .= '</td>';
         $output .= '</tr>';
     }

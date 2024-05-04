@@ -1,9 +1,5 @@
 <?php
 
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-
 require_once __DIR__ . '/../../../init.php';
 
 use WHMCS\Database\Capsule;
@@ -33,7 +29,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             die('Répertoire d\'upload non configuré.');
         }
 
-        $uploadDir = '/home/loanf/workspaces/perso-workspace/uploads/';
         $uploadName = $clientId . '_' . date('YmdHis') . '_' . basename($file['name']);
         $uploadFile = $uploadDir . $uploadName;
 
@@ -43,14 +38,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             echo "Erreur lors du téléchargement du fichier.\n";
         }
 
-        Capsule::table('mod_student_verification')->insert([
-            'student_id' => $clientId,
-            'document' => $uploadFile,
-            'created_at' => date('Y-m-d H:i:s'),
-            'updated_at' => date('Y-m-d H:i:s')
-        ]);
-    }
+        $existingEntry = Capsule::table('mod_student_verification')
+            ->where('student_id', $clientId)
+            ->where('verified', '<>', 0)
+            ->exists();
 
-    // Mettez à jour la base de données pour indiquer que l'utilisateur a maintenant vu le contenu.
-    Capsule::table('tblclients')->where('id', $clientId)->update(['hasSeenContent' => 1]);
+        if ($existingEntry) {
+            echo "Une demande de vérification est déjà en cours pour cet étudiant.";
+        } else {
+            Capsule::table('mod_student_verification')->insert([
+                'student_id' => $clientId,
+                'document' => $uploadFile,
+                'created_at' => date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s')
+            ]);
+        }
+        
+        // Mettez à jour la base de données pour indiquer que l'utilisateur a maintenant vu le contenu.
+        Capsule::table('tblclients')->where('id', $clientId)->update(['hasSeenContent' => 1]);
+    }
 }
