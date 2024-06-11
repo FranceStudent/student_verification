@@ -46,6 +46,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if ($existingEntry) {
             echo "Une demande de vérification est déjà en cours pour cet étudiant.";
         } else {
+            Capsule::table('mod_student_verification')
+                ->where('student_id', $clientId)
+                ->delete();
+
             Capsule::table('mod_student_verification')->insert([
                 'student_id' => $clientId,
                 'document' => $uploadFile,
@@ -53,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 'updated_at' => date('Y-m-d H:i:s')
             ]);
         }
-        
+
         // Mettez à jour la base de données pour indiquer que l'utilisateur a maintenant vu le contenu.
         Capsule::table('tblclients')->where('id', $clientId)->update(['hasSeenContent' => 1]);
     }

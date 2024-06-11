@@ -67,13 +67,43 @@ function student_verification_config()
         // Default language
         'language' => 'french',
         // Version number
-        'version' => '2.0',
+        'version' => '2.1',
         'fields' => [
+            'method' => [
+                'FriendlyName' => 'Méthode de vérification',
+                'Type' => 'radio',
+                'Options' => 'Manuelle,SheerID',
+                'Description' => 'Méthode de vérification des étudiants',
+            ],
             'upload_dir' => [
-                'FriendlyName' => 'Répertoire d\'upload',
+                'FriendlyName' => 'Manuelle - Répertoire d\'upload',
                 'Type' => 'text',
                 'Size' => '50',
                 'Description' => '<br>Répertoire où les documents des étudiants seront stockés (ne doit pas être accessible publiquement)',
+            ],
+            'sheerid_client_id' => [
+                'FriendlyName' => 'SheerID - Client ID',
+                'Type' => 'text',
+                'Size' => '50',
+                'Description' => 'Client ID de SheerID',
+            ],
+            'sheerid_access_token' => [
+                'FriendlyName' => 'SheerID - Access Token',
+                'Type' => 'text',
+                'Size' => '50',
+                'Description' => 'Access Token de SheerID',
+            ],
+            'website_link' => [
+                'FriendlyName' => 'SheerID - Lien du site',
+                'Type' => 'text',
+                'Size' => '50',
+                'Description' => 'Lien du site web de votre entreprise',
+            ],
+            'program_id' => [
+                'FriendlyName' => 'SheerID - ID du programme',
+                'Type' => 'text',
+                'Size' => '50',
+                'Description' => 'ID du programme SheerID',
             ],
             'information' => [
                 'FriendlyName' => 'Information',
@@ -106,26 +136,46 @@ function student_verification_activate()
 {
     // Create custom tables and schema required by your module
     try {
-        Capsule::schema()->create(
-            'mod_student_verification',
-            function ($table) {
-                /** @var \Illuminate\Database\Schema\Blueprint $table */
-                $table->increments('id');
-                $table->string('student_id');
-                $table->string('document');
-                $table->boolean('verified')->nullable();
-                // $table->string('reason')->nullable();
-                $table->timestamps();
-            }
-        );
+        if (!Capsule::schema()->hasTable('mod_student_verification')) {
+            Capsule::schema()->create(
+                'mod_student_verification',
+                function ($table) {
+                    /** @var \Illuminate\Database\Schema\Blueprint $table */
+                    $table->increments('id');
+                    $table->string('student_id');
+                    $table->string('document');
+                    $table->boolean('verified')->nullable();
+                    $table->string('reason')->nullable();
+                    $table->integer('verificateur_id')->nullable();
+                    $table->timestamps();
+                }
+            );
+        }
 
-        Capsule::schema()->table(
-            'tblclients',
-            function ($table) {
-                /** @var \Illuminate\Database\Schema\Blueprint $table */
-                $table->boolean('hasSeenContent')->default(false);
-            }
-        );
+        if (!Capsule::schema()->hasTable('mod_student_verification_logs')) {
+            Capsule::schema()->create(
+                'mod_student_verification_logs',
+                function ($table) {
+                    /** @var \Illuminate\Database\Schema\Blueprint $table */
+                    $table->increments('id');
+                    $table->integer('verification_id');
+                    $table->integer('verificateur_id');
+                    $table->boolean('verified');
+                    $table->string('reason')->nullable();
+                    $table->timestamps();
+                }
+            );
+        }
+
+        if (!Capsule::schema()->hasColumn('tblclients', 'hasSeenContent')) {
+            Capsule::schema()->table(
+                'tblclients',
+                function ($table) {
+                    /** @var \Illuminate\Database\Schema\Blueprint $table */
+                    $table->boolean('hasSeenContent')->default(false);
+                }
+            );
+        }
 
         return [
             // Supported values here include: success, error or info
@@ -136,7 +186,7 @@ function student_verification_activate()
         return [
             // Supported values here include: success, error or info
             'status' => "error",
-            'description' => 'Unable to create mod_student_verification_verification : ' . $e->getMessage(),
+            'description' => 'Unable to create tables : ' . $e->getMessage(),
         ];
     }
 }
@@ -176,7 +226,7 @@ function student_verification_deactivate()
         return [
             // Supported values here include: success, error or info
             'status' => "error",
-            'description' => 'Unable to drop mod_student_verification_verification : ' . $e->getMessage(),
+            'description' => 'Unable to drop tables : ' . $e->getMessage(),
         ];
     }
 }
@@ -185,14 +235,17 @@ function student_verification_output($vars)
 {
     $modulelink = $vars['modulelink'];
 
+
+    $output = '<div class="row" style="margin-bottom: 20px;">';
+    $output .= '<div class="col-md-6">';
     $output .= '<h1>Recherche d\'utilisateurs par identifiant</h1>';
-    $output .= '<div class="form-inline">';
-    $output .= '<div class="form-group col">';
-    $output .= '<div class="col-sm-10">';
+    $output .= '<div class="form-row">';
+    $output .= '<div class="col-md-8 col-sm-12 mb-2">';
     $output .= '<input type="text" class="form-control" id="studentId" name="studentId" placeholder="Identifiant de l\'étudiant">';
     $output .= '</div>';
+    $output .= '<div class="col-md-4 col-sm-12 w-100">';
+    $output .= '<a class="btn btn-success" style="width:100%;" id="searchButton" href="javascript:void(0);"><i class="fas fa-search"></i> Rechercher</a>';
     $output .= '</div>';
-    $output .= '<a class="btn btn-success my-auto" id="searchButton" href="javascript:void(0);"><i class="fas fa-search"></i> Rechercher</a>';
 
     $output .= <<<HTML
     <script>
@@ -215,24 +268,42 @@ function student_verification_output($vars)
 
         if ($student) {
             if ($student->verified) {
-                $output .= "&nbsp&nbsp<span class='text-success'><i class='fas fa-check'></i> L'étudiant avec l'ID $studentId est vérifié.</span>";
+                $output .= "<span class='text-success col-md-8 mb-2'><i class='fas fa-check'></i> L'étudiant avec l'ID $studentId est vérifié.</span>";
             } else if ($student->verified === 0) {
-                $output .= "&nbsp&nbsp<span class='text-danger'><i class='fas fa-times'></i> L'étudiant avec l'ID $studentId a été rejeté.</span>";
+                $output .= "<span class='text-danger col-md-8 mb-2'><i class='fas fa-times'></i> L'étudiant avec l'ID $studentId a été rejeté pour : " . $student->reason . "</span>";
             } else {
-                $output .= "&nbsp&nbsp<span class='text-warning'><i class='fas fa-exclamation-triangle'></i> L'étudiant avec l'ID $studentId est en attente de vérification.</span>";
+                $output .= "<span class='text-warning col-md-8'><i class='fas fa-exclamation-triangle'></i> L'étudiant avec l'ID $studentId est en attente.</span>";
             }
         } else {
-            $output .= "&nbsp&nbsp<span class='text-danger'><i class='fas fa-times'></i> L'étudiant avec l'ID $studentId n'a pas soumis de document.</span>";
+            $output .= "<span class='text-danger col-md-8 mb-2'><i class='fas fa-times'></i> L'étudiant avec l'ID $studentId n'a pas soumis de document.</span>";
         }
     }
 
-    $output .= '</div></br>';
+    $output .= '</div></div>';
+
+    $verificationCount = Capsule::table('mod_student_verification')->where('verified', true)->count();
+
+    $output .= '<div class="col-md-6 d-flex justify-content-center">';
+    $output .= '<div class="card text-center">';
+    $output .= '<p class="card-title text-success" style="font-size: 30px; margin-bottom: 0; margin-top: 20px;">' . $verificationCount . '</p>';
+    $output .= '<p class="card-title text-success" style="font-size: 12px;">Vérifications approuvées</p>';
+    $output .= '</div>';
+    $output .= '</div>';
+    $output .= '</div>';
+
+    $perPage = 10; // Nombre d'entrées par page
+    $totalEntries = Capsule::table('mod_student_verification')->where('verified', null)->count(); // Nombre total d'entrées
+    $totalPages = ceil($totalEntries / $perPage); // Nombre total de pages
+    $page = isset($_GET['page']) ? (int)$_GET['page'] : 1; // Page actuelle
+    $start = ($page - 1) * $perPage; // Calculer le point de départ pour la requête
 
     // Récupérer toutes les vérifications avec les informations des utilisateurs
     $verifications = Capsule::table('mod_student_verification')
         ->join('tblclients', 'mod_student_verification.student_id', '=', 'tblclients.id')
         ->select('mod_student_verification.*', 'tblclients.firstname', 'tblclients.lastname')
         ->where('verified', null)
+        ->skip($start)
+        ->take($perPage)
         ->get();
 
     if (isset($_GET['action']) && isset($_GET['id'])) {
@@ -241,19 +312,13 @@ function student_verification_output($vars)
 
         if ($verification) {
             if ($_GET['action'] == 'approve') {
-                Capsule::table('mod_student_verification')->where('id', $id)->update(['verified' => true]);
-
-                // localAPI('SendEmail', [
-                //     'messagename' => 'Approval Email Template Name',
-                //     'id' => $verification->student_id
-                // ], 'adminusername');
+                Capsule::table('mod_student_verification')->where('id', $id)->update(['verified' => true, 'verificateur_id' => $_SESSION['adminid'], 'updated_at' => date('Y-m-d H:i:s')]);
+                Capsule::table('mod_student_verification_logs')->insert(['verification_id' => $id, 'verificateur_id' => $_SESSION['adminid'], 'verified' => true, 'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s')]);
             } elseif ($_GET['action'] == 'reject') {
-                Capsule::table('mod_student_verification')->where('id', $id)->update(['verified' => false]);
-
-                // localAPI('SendEmail', [
-                //     'messagename' => 'Rejection Email Template Name',
-                //     'id' => $verification->student_id
-                // ], 'adminusername');
+                $reason = $_GET['reason'];
+                Capsule::table('mod_student_verification')->where('id', $id)->update(['verified' => false, 'reason' => $reason, 'verificateur_id' => $_SESSION['adminid'], 'updated_at' => date('Y-m-d H:i:s')]);
+                Capsule::table('mod_student_verification_logs')->insert(['verification_id' => $id, 'verificateur_id' => $_SESSION['adminid'], 'verified' => false, 'reason' => $reason, 'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s')]);
+                echo json_encode(['success' => true]);
             }
 
             $documentPath = $verification->document;
@@ -265,13 +330,14 @@ function student_verification_output($vars)
         header('Location: ' . $modulelink);
     }
 
-    $output .= '<h1 class="mb-4">Approbation des documents des étudiants</h1>';
+    $output .= '<h1 class="mb-4">Approbation des documents des étudiants - <span class="text-muted"> ' . count($verifications) . ' en attente</span></h1>';
 
     $output .= '<div class="form-group">';
     $output .= '<label for="filterId">Filtrer par ID :</label>';
     $output .= '<input type="text" class="form-control" id="filterId" name="filterId" placeholder="Entrez l\'ID">';
     $output .= '</div>';
 
+    $output .= '<div class="table-responsive">';
     $output .= '<table class="table table-striped">';
     $output .= '<thead class="thead-dark">';
     $output .= '<tr><th>ID utilisateur</th><th>Nom d\'utilisateur</th><th>Document envoyé</th><th>Action</th></tr>';
@@ -280,21 +346,21 @@ function student_verification_output($vars)
 
     $output .= <<<HTML
     <script>
-    document.getElementById("filterId").addEventListener("input", function(event) {
-    var filterId = event.target.value;
-    var rows = document.querySelectorAll("table tbody tr");
-    rows.forEach(function(row) {
-        var cell = row.querySelector("td:first-child");
-        if (cell) {
-        var id = cell.textContent;
-        if (filterId === "" || id === filterId) {
-            row.style.display = "";
-        } else {
-            row.style.display = "none";
-        }
-        }
-    });
-    });
+        document.getElementById("filterId").addEventListener("input", function(event) {
+            var filterId = event.target.value;
+            var rows = document.querySelectorAll("table tbody tr");
+            rows.forEach(function(row) {
+                var cell = row.querySelector("td:first-child");
+                if (cell) {
+                var id = cell.textContent;
+                if (filterId === "" || id === filterId) {
+                    row.style.display = "";
+                } else {
+                    row.style.display = "none";
+                }
+                }
+            });
+        });
     </script>
     HTML;
 
@@ -304,17 +370,82 @@ function student_verification_output($vars)
         $output .= '<td>' . $verification->firstname . ' ' . $verification->lastname . '</td>';
 
         $document = pathinfo($verification->document, PATHINFO_BASENAME);
-        $output .= '<td><a class="my-auto" href="/modules/addons/student_verification/download.php?file=' . urlencode($verification->id) . '">' . $document . '</a></td>';
+        $output .= '<td><a class="my-auto" target="_blank" href="/modules/addons/student_verification/download.php?file=' . urlencode($verification->id) . '">' . $document . '</a></td>';
 
         $output .= '<td>';
         $output .= '<a class="btn btn-success my-auto" href="' . $modulelink . '&action=approve&id=' . $verification->id . '"><i class="fas fa-check"></i> Approuver</a>';
-        $output .= ' <a class="btn btn-danger my-auto" href="' . $modulelink . '&action=reject&id=' . $verification->id . '"><i class="fas fa-times"></i> Rejeter</a>';
+        $output .= ' <a class="btn btn-danger my-auto reject-btn" data-id="' . $verification->id . '" href="#"><i class="fas fa-times"></i> Rejeter</a>';
         $output .= '</td>';
         $output .= '</tr>';
     }
 
     $output .= '</tbody>';
-    $output .= '</table>';
+    $output .= '</table></div>';
+
+    $output .= '<nav aria-label="Page navigation example">';
+    $output .= '<ul class="pagination">';
+    if ($page > 1) {
+        $output .= '<li class="page-item"><a class="page-link" href="' . $modulelink . '&page=' . ($page - 1) . '">Précédent</a></li>';
+    }
+    for ($i = 1; $i <= $totalPages; $i++) {
+        $active = $page == $i ? 'active' : '';
+        $output .= '<li class="page-item ' . $active . '"><a class="page-link" href="' . $modulelink . '&page=' . $i . '">' . $i . '</a></li>';
+    }
+    if ($page < $totalPages) {
+        $output .= '<li class="page-item"><a class="page-link" href="' . $modulelink . '&page=' . ($page + 1) . '">Suivant</a></li>';
+    }
+    $output .= '</ul>';
+    $output .= '</nav>';
+
+    $output .= <<<HTML
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@10"></script>
+    <script>
+        $(document).ready(function() {
+            $('.reject-btn').click(function(e) {
+                e.preventDefault();
+
+                var id = $(this).data('id');
+
+                Swal.fire({
+                    title: 'Rejet de la vérification',
+                    input: 'text',
+                    inputPlaceholder: 'Veuillez entrer la raison du refus',
+                    showCancelButton: true,
+                    confirmButtonText: 'Rejeter',
+                    cancelButtonText: 'Annuler',
+                    showLoaderOnConfirm: true,
+                    preConfirm: (reason) => {
+                        if (reason) {
+                            return $.ajax({
+                                url: modulelink,
+                                type: 'GET',
+                                data: {
+                                    module: 'student_verification',
+                                    action: 'reject',
+                                    id: id,
+                                    reason: reason
+                                }
+                            }).done(function(response) {
+                                return location.reload();
+                            }).fail(function(jqXHR, textStatus, errorThrown) {
+                                console.log(jqXHR.status); // Affiche le statut HTTP
+                                console.log(jqXHR.responseText); // Affiche le texte de la réponse
+                                Swal.showValidationMessage(`Request failed: ${textStatus}`);
+                            }).always(function() {
+                                Swal.close();
+                            });
+                        }
+                    },
+                    allowOutsideClick: () => !Swal.isLoading()
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        location.reload();
+                    }
+                });
+            });
+        });
+    </script>
+    HTML;
 
     echo $output;
 }

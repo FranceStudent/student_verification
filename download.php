@@ -35,5 +35,5 @@ finfo_close($finfo);
 
 // Définissez les headers et servez le fichier
 header('Content-Type: ' . $mimeType);
-header('Content-Disposition: attachment; filename="' . basename($filePath) . '"');
+header('Content-Disposition: inline; filename="' . basename($filePath) . '"');
 readfile($filePath);
