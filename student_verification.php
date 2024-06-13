@@ -259,6 +259,42 @@ function student_verification_output($vars)
     </script>
     HTML;
 
+    if (isset($_GET['action']) && isset($_GET['id'])) {
+        $id = $_GET['id'];
+
+        if ($_GET['action'] == 'verif') {
+            Capsule::table('mod_student_verification')->where('student_id', $id)->delete();
+            Capsule::table('mod_student_verification')->insert(['student_id' => $id, 'document' => '', 'verified' => true, 'reason' => 'Vérification admin', 'verificateur_id' => $_SESSION['adminid'], 'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s')]);
+            Capsule::table('mod_student_verification_logs')->insert(['verification_id' => $id, 'verificateur_id' => $_SESSION['adminid'], 'verified' => false, 'reason' => 'Vérification manuelle', 'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s')]);
+            Capsule::table('tblclients')->where('id', $id)->update(['hasSeenContent' => true]);
+        } elseif ($_GET['action'] == 'delete') {
+            Capsule::table('mod_student_verification')->where('student_id', $id)->delete();
+            Capsule::table('mod_student_verification_logs')->insert(['verification_id' => $id, 'verificateur_id' => $_SESSION['adminid'], 'verified' => false, 'reason' => 'Vérification rejetée', 'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s')]);
+            Capsule::table('tblclients')->where('id', $id)->update(['hasSeenContent' => false]);
+        }
+
+        $verification = Capsule::table('mod_student_verification')->where('id', $id)->first();
+
+        if ($verification) {
+            if ($_GET['action'] == 'approve') {
+                Capsule::table('mod_student_verification')->where('id', $id)->update(['verified' => true, 'verificateur_id' => $_SESSION['adminid'], 'updated_at' => date('Y-m-d H:i:s')]);
+                Capsule::table('mod_student_verification_logs')->insert(['verification_id' => $id, 'verificateur_id' => $_SESSION['adminid'], 'verified' => true, 'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s')]);
+            } elseif ($_GET['action'] == 'reject') {
+                $reason = $_GET['reason'];
+                Capsule::table('mod_student_verification')->where('id', $id)->update(['verified' => false, 'reason' => $reason, 'verificateur_id' => $_SESSION['adminid'], 'updated_at' => date('Y-m-d H:i:s')]);
+                Capsule::table('mod_student_verification_logs')->insert(['verification_id' => $id, 'verificateur_id' => $_SESSION['adminid'], 'verified' => false, 'reason' => $reason, 'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s')]);
+                echo json_encode(['success' => true]);
+            }
+
+            $documentPath = $verification->document;
+            if (file_exists($documentPath)) {
+                unlink($documentPath);
+            }
+        }
+
+        header('Location: ' . $modulelink);
+    }
+
     if (isset($_GET['studentId'])) {
         $studentId = $_GET['studentId'];
         $student = Capsule::table('mod_student_verification')
@@ -268,14 +304,14 @@ function student_verification_output($vars)
 
         if ($student) {
             if ($student->verified) {
-                $output .= "<span class='text-success col-md-8 mb-2'><i class='fas fa-check'></i> L'étudiant avec l'ID $studentId est vérifié.</span>";
+                $output .= "<span class='text-success col-md-8 mb-2'><i class='fas fa-check'></i> L'étudiant avec l'ID $studentId est vérifié.</br><a class='text-danger' href='". $modulelink ."&action=delete&id=$studentId'><i class='fas fa-times'></i> Supprimer</a></span>";
             } else if ($student->verified === 0) {
-                $output .= "<span class='text-danger col-md-8 mb-2'><i class='fas fa-times'></i> L'étudiant avec l'ID $studentId a été rejeté pour : " . $student->reason . "</span>";
+                $output .= "<span class='text-danger col-md-8 mb-2'><i class='fas fa-times'></i> L'étudiant avec l'ID $studentId a été rejeté pour : " . $student->reason . "</br><a class='text-success' href='". $modulelink ."&action=verif&id=$studentId'><i class='fas fa-check'></i> Vérifier</a></span>";
             } else {
-                $output .= "<span class='text-warning col-md-8'><i class='fas fa-exclamation-triangle'></i> L'étudiant avec l'ID $studentId est en attente.</span>";
+                $output .= "<span class='text-warning col-md-8'><i class='fas fa-exclamation-triangle'></i> L'étudiant avec l'ID $studentId est en attente.</br><a class='text-success' href='". $modulelink ."&action=verif&id=$studentId'><i class='fas fa-check'></i> Vérifier</a> | <a class='text-danger' href='". $modulelink ."&action=delete&id=$studentId'><i class='fas fa-times'></i> Supprimer</a></span>";
             }
         } else {
-            $output .= "<span class='text-danger col-md-8 mb-2'><i class='fas fa-times'></i> L'étudiant avec l'ID $studentId n'a pas soumis de document.</span>";
+            $output .= "<span class='text-danger col-md-8 mb-2'><i class='fas fa-times'></i> L'étudiant avec l'ID $studentId n'a pas soumis de document.</br><a class='text-success' href='". $modulelink ."&action=verif&id=$studentId'><i class='fas fa-check'></i> Vérifier</a></span>";
         }
     }
 
@@ -305,30 +341,6 @@ function student_verification_output($vars)
         ->skip($start)
         ->take($perPage)
         ->get();
-
-    if (isset($_GET['action']) && isset($_GET['id'])) {
-        $id = $_GET['id'];
-        $verification = Capsule::table('mod_student_verification')->where('id', $id)->first();
-
-        if ($verification) {
-            if ($_GET['action'] == 'approve') {
-                Capsule::table('mod_student_verification')->where('id', $id)->update(['verified' => true, 'verificateur_id' => $_SESSION['adminid'], 'updated_at' => date('Y-m-d H:i:s')]);
-                Capsule::table('mod_student_verification_logs')->insert(['verification_id' => $id, 'verificateur_id' => $_SESSION['adminid'], 'verified' => true, 'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s')]);
-            } elseif ($_GET['action'] == 'reject') {
-                $reason = $_GET['reason'];
-                Capsule::table('mod_student_verification')->where('id', $id)->update(['verified' => false, 'reason' => $reason, 'verificateur_id' => $_SESSION['adminid'], 'updated_at' => date('Y-m-d H:i:s')]);
-                Capsule::table('mod_student_verification_logs')->insert(['verification_id' => $id, 'verificateur_id' => $_SESSION['adminid'], 'verified' => false, 'reason' => $reason, 'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s')]);
-                echo json_encode(['success' => true]);
-            }
-
-            $documentPath = $verification->document;
-            if (file_exists($documentPath)) {
-                unlink($documentPath);
-            }
-        }
-
-        header('Location: ' . $modulelink);
-    }
 
     $output .= '<h1 class="mb-4">Approbation des documents des étudiants - <span class="text-muted"> ' . count($verifications) . ' en attente</span></h1>';
 
