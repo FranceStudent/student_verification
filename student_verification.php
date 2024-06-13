@@ -67,7 +67,7 @@ function student_verification_config()
         // Default language
         'language' => 'french',
         // Version number
-        'version' => '2.1',
+        'version' => '2.2',
         'fields' => [
             'method' => [
                 'FriendlyName' => 'Méthode de vérification',

@@ -1,5 +1,5 @@
 {
-    "schema": "2.1",
+    "schema": "2.2",
     "type": "whmcs-addons",
     "name": "student_verification",
     "license": "MIT",
