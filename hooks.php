@@ -489,7 +489,7 @@ add_hook('ClientAreaPage', 1, function ($vars) {
 // Page de profil => SheerID
 add_hook('ClientAreaPageProfile', 1, function ($vars) {
 
-    if (Capsule::table('tbladdonmodules')->where('module', 'student_verification')->where('setting', 'method')->first()->value === 'Manuelle') {
+    if (Capsule::table('tbladdonmodules')->where('module', 'student_verification')->where('setting', 'method')->first()->value === 'SheerID') {
 
         // Récupérez l'ID du client actuellement connecté.
         $clientId = $_SESSION['uid'];
